@@ -175,6 +175,20 @@ Resources:
                 Action:
                   - 'neptune-db:*'
                 Resource: !Sub 'arn:aws:neptune-db:${AWS::Region}:${AWS::AccountId}:cluster:${ServiceName}-${StageName}-neptune-cluster/*'
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogDelivery"
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:DeleteLogDelivery"
+                  - "logs:Describe*"
+                  - "logs:GetLogDelivery"
+                  - "logs:GetLogEvents"
+                  - "logs:ListLogDeliveries"
+                  - "logs:PutLogEvents"
+                  - "logs:PutResourcePolicy"
+                  - "logs:UpdateLogDelivery"
+                Resource: "*"
       Tags:
         - Key: Name
           Value: !Sub '${ServiceName}-${StageName}-notebook-role'
