@@ -175,7 +175,11 @@ Resources:
               - Effect: Allow
                 Action:
                   - 'neptune-db:*'
-                Resource: !Sub 'arn:aws:neptune-db:${AWS::Region}:${AWS::AccountId}:cluster:${ServiceName}-${StageName}-neptune-cluster/*'
+                # https://docs.aws.amazon.com/ja_jp/neptune/latest/userguide/iam-data-resources.html
+                Resource:
+                  !Sub
+                    - arn:aws:neptune-db:${AWS::Region}:${AWS::AccountId}:${ClusterResourceId}/*
+                    - ClusterResourceId: !GetAtt NeptuneDBCluster.ClusterResourceId
               - Effect: Allow
                 Action:
                   - "logs:CreateLogDelivery"
