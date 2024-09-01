@@ -1,0 +1,203 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: 
+  "Neptune"
+
+Metadata: 
+  AWS::CloudFormation::Interface: 
+    ParameterGroups: 
+      - 
+        Label: 
+          default: "Common parameters"
+        Parameters: 
+          - "ServiceName"
+          - "StageName"
+        
+Parameters: 
+  #----------------------------------------
+  # Common parameters
+  #---------------------------------------- 
+  ServiceName: 
+    Description: "Service name"
+    Type: "String"
+    Default: "gaphdb"
+  StageName: 
+    Description: "Stage name"
+    Type: "String"
+    Default: "develop"
+    AllowedValues: 
+      - "develop"
+      - "stg"
+      - "prod"
+  #----------------------------------------
+  # Neptune parameters
+  # 参考：https://docs.aws.amazon.com/ja_jp/neptune/latest/userguide/get-started-cfn-create.html
+  #---------------------------------------- 
+  DbInstanceType:
+    Description: Neptune DB instance type
+    Type: String
+    Default: db.t4g.medium
+    AllowedValues:
+      - db.t4g.medium
+      - db.t3.medium
+    ConstraintDescription: >-
+      Must be a valid Neptune instance type. Note that for Stockholm and OSU
+      only R5 and T3 instances are available.
+  DBClusterPort:
+    Type: String
+    Default: '8182'
+    Description: Enter the port of your Neptune cluster
+  NotebookInstanceType:
+    Description: >-
+      SageMaker Notebook instance type. Please refer
+      https://aws.amazon.com/sagemaker/pricing/ for uptodate allowed instance
+      type in aws region and https://aws.amazon.com/neptune/pricing/ for
+      pricing.
+    Type: String
+    Default: ml.t3.medium
+    AllowedValues:
+      - none
+      - ml.t3.medium
+      - ml.t3.large
+      - ml.t3.xlarge
+      - ml.t3.2xlarge
+    ConstraintDescription: Must be a valid SageMaker instance type.
+
+Resources:
+  NotebookSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "Enable access to Notebook"
+      VpcId: !ImportValue 
+        Fn::Sub: "${ServiceName}-${StageName}-vpc"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${ServiceName}-${StageName}-neptune-notebook-sg"
+        - Key: "ServiceName"
+          Value: !Ref ServiceName
+        - Key: "StageName"
+          Value: !Ref StageName
+
+  NeptuneSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupName: !Sub "${ServiceName}-${StageName}-neptune-cluster-sg"
+      GroupDescription: "Enable access to Neptune"
+      VpcId: !ImportValue 
+        Fn::Sub: "${ServiceName}-${StageName}-vpc"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8182
+          ToPort: 8182
+          SourceSecurityGroupId: !Ref NotebookSecurityGroup
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${ServiceName}-${StageName}-neptune-cluster-sg"
+        - Key: "ServiceName"
+          Value: !Ref ServiceName
+        - Key: "StageName"
+          Value: !Ref StageName
+
+  NeptuneDBSubnetGroup:
+    Type: AWS::Neptune::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: !Sub '${ServiceName}-${StageName}-neptune-cluster-subnet-group'
+      SubnetIds: 
+        - !ImportValue 
+          Fn::Sub: "${ServiceName}-${StageName}-subnet-private-1"
+        - !ImportValue 
+          Fn::Sub: "${ServiceName}-${StageName}-subnet-private-2"
+      Tags: 
+        - Key: Name
+          Value: !Sub '${ServiceName}-${StageName}-neptune-cluster-subnet-group'
+        - Key: ServiceName
+          Value: !Ref ServiceName
+        - Key: StageName
+          Value: !Ref StageName
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+
+  NeptuneDBCluster:
+    Type: AWS::Neptune::DBCluster
+    Properties:
+      DBClusterIdentifier: !Sub '${ServiceName}-${StageName}-neptune-cluster'
+      DBSubnetGroupName: !Ref NeptuneDBSubnetGroup
+      DBPort: !Ref DBClusterPort  # 本当は任意入力だが個人的に書いた方がわかりやすいので記述
+      Port: !Ref DBClusterPort  # 本当は任意入力だが個人的に書いた方がわかりやすいので記述
+      IamAuthEnabled: True
+      StorageEncrypted: True
+      VpcSecurityGroupIds: 
+        - !GetAtt NeptuneSecurityGroup.GroupId
+      Tags: 
+        - Key: Name
+          Value: !Sub '${ServiceName}-${StageName}-neptune-cluster'
+        - Key: ServiceName
+          Value: !Ref ServiceName
+        - Key: StageName
+          Value: !Ref StageName
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Retain
+  
+  NeptuneDBInstance:
+    Type: AWS::Neptune::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub '${ServiceName}-${StageName}-neptune-instance'
+      DBInstanceClass: !Ref DbInstanceType
+      DBSubnetGroupName: !Ref NeptuneDBSubnetGroup
+      DBClusterIdentifier: !Ref NeptuneDBCluster
+      Tags:
+        - Key: Name
+          Value: !Sub '${ServiceName}-${StageName}-neptune-instance'
+        - Key: ServiceName
+          Value: !Ref ServiceName
+        - Key: StageName
+          Value: !Ref StageName
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Retain
+
+  NotebookRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub '${ServiceName}-${StageName}-notebook-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - 'sagemaker.amazonaws.com'
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: !Sub '${ServiceName}-${StageName}-notebook-policy'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'neptune-db:*'
+                Resource: !Sub 'arn:aws:neptune-db:${AWS::Region}:${AWS::AccountId}:cluster:${ServiceName}-${StageName}-neptune-cluster/*'
+      Tags:
+        - Key: Name
+          Value: !Sub '${ServiceName}-${StageName}-notebook-role'
+        - Key: ServiceName
+          Value: !Ref ServiceName
+        - Key: StageName
+          Value: !Ref StageName
+
+  NeptuneSagemakerNotebook:
+    Type: AWS::SageMaker::NotebookInstance
+    Properties:
+      NotebookInstanceName: !Sub '${ServiceName}-${StageName}-neptune-notebook'
+      InstanceType: !Ref NotebookInstanceType
+      RoleArn: !GetAtt NotebookRole.Arn
+      RootAccess: Enabled
+      SecurityGroupIds: 
+        - !Ref NotebookSecurityGroup
+      SubnetId: !ImportValue 
+        Fn::Sub: "${ServiceName}-${StageName}-subnet-private-1"
+      Tags: 
+        - Key: Name
+          Value: !Sub '${ServiceName}-${StageName}-neptune-notebook'
+        - Key: ServiceName
+          Value: !Ref ServiceName
+        - Key: StageName
+          Value: !Ref StageName
