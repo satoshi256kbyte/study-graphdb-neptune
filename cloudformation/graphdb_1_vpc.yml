@@ -28,7 +28,7 @@ Parameters:
   ServiceName: 
     Description: "Service name"
     Type: "String"
-    Default: "gaphdb"
+    Default: "graphdb"
   StageName: 
     Description: "Stage name"
     Type: "String"
