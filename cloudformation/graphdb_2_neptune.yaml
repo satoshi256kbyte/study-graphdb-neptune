@@ -66,6 +66,7 @@ Resources:
   NotebookSecurityGroup:
     Type: "AWS::EC2::SecurityGroup"
     Properties:
+      GroupName: !Sub "${ServiceName}-${StageName}-neptune-notebook-sg"
       GroupDescription: "Enable access to Notebook"
       VpcId: !ImportValue 
         Fn::Sub: "${ServiceName}-${StageName}-vpc"
