@@ -124,7 +124,7 @@ Resources:
       DBSubnetGroupName: !Ref NeptuneDBSubnetGroup
       DBPort: !Ref DBClusterPort  # 本当は任意入力だが個人的に書いた方がわかりやすいので記述
       Port: !Ref DBClusterPort  # 本当は任意入力だが個人的に書いた方がわかりやすいので記述
-      IamAuthEnabled: True
+      # IamAuthEnabled: True
       StorageEncrypted: True
       VpcSecurityGroupIds: 
         - !GetAtt NeptuneSecurityGroup.GroupId
