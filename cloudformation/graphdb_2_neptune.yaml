@@ -44,7 +44,7 @@ Parameters:
       only R5 and T3 instances are available.
   DBClusterPort:
     Type: String
-    Default: '8182'
+    Default: "8182"
     Description: Enter the port of your Neptune cluster
   NotebookInstanceType:
     Description: >-
@@ -99,9 +99,9 @@ Resources:
           Value: !Ref StageName
 
   NeptuneDBSubnetGroup:
-    Type: AWS::Neptune::DBSubnetGroup
+    Type: "AWS::Neptune::DBSubnetGroup"
     Properties:
-      DBSubnetGroupDescription: !Sub '${ServiceName}-${StageName}-neptune-cluster-subnet-group'
+      DBSubnetGroupDescription: !Sub "${ServiceName}-${StageName}-neptune-cluster-subnet-group"
       SubnetIds: 
         - !ImportValue 
           Fn::Sub: "${ServiceName}-${StageName}-subnet-private-1"
@@ -109,7 +109,7 @@ Resources:
           Fn::Sub: "${ServiceName}-${StageName}-subnet-private-2"
       Tags: 
         - Key: Name
-          Value: !Sub '${ServiceName}-${StageName}-neptune-cluster-subnet-group'
+          Value: !Sub "${ServiceName}-${StageName}-neptune-cluster-subnet-group"
         - Key: ServiceName
           Value: !Ref ServiceName
         - Key: StageName
@@ -118,9 +118,9 @@ Resources:
     UpdateReplacePolicy: Delete
 
   NeptuneDBCluster:
-    Type: AWS::Neptune::DBCluster
+    Type: "AWS::Neptune::DBCluster"
     Properties:
-      DBClusterIdentifier: !Sub '${ServiceName}-${StageName}-neptune-cluster'
+      DBClusterIdentifier: !Sub "${ServiceName}-${StageName}-neptune-cluster"
       DBSubnetGroupName: !Ref NeptuneDBSubnetGroup
       DBPort: !Ref DBClusterPort  # 本当は任意入力だが個人的に書いた方がわかりやすいので記述
       Port: !Ref DBClusterPort  # 本当は任意入力だが個人的に書いた方がわかりやすいので記述
@@ -130,7 +130,7 @@ Resources:
         - !GetAtt NeptuneSecurityGroup.GroupId
       Tags: 
         - Key: Name
-          Value: !Sub '${ServiceName}-${StageName}-neptune-cluster'
+          Value: !Sub "${ServiceName}-${StageName}-neptune-cluster"
         - Key: ServiceName
           Value: !Ref ServiceName
         - Key: StageName
@@ -139,15 +139,15 @@ Resources:
     UpdateReplacePolicy: Retain
   
   NeptuneDBInstance:
-    Type: AWS::Neptune::DBInstance
+    Type: "AWS::Neptune::DBInstance"
     Properties:
-      DBInstanceIdentifier: !Sub '${ServiceName}-${StageName}-neptune-instance'
+      DBInstanceIdentifier: !Sub "${ServiceName}-${StageName}-neptune-instance"
       DBInstanceClass: !Ref DbInstanceType
       DBSubnetGroupName: !Ref NeptuneDBSubnetGroup
       DBClusterIdentifier: !Ref NeptuneDBCluster
       Tags:
         - Key: Name
-          Value: !Sub '${ServiceName}-${StageName}-neptune-instance'
+          Value: !Sub "${ServiceName}-${StageName}-neptune-instance"
         - Key: ServiceName
           Value: !Ref ServiceName
         - Key: StageName
@@ -156,25 +156,25 @@ Resources:
     UpdateReplacePolicy: Retain
 
   NotebookRole:
-    Type: 'AWS::IAM::Role'
+    Type: "AWS::IAM::Role"
     Properties:
-      RoleName: !Sub '${ServiceName}-${StageName}-notebook-role'
+      RoleName: !Sub "${ServiceName}-${StageName}-notebook-role"
       AssumeRolePolicyDocument:
-        Version: '2012-10-17'
+        Version: "2012-10-17"
         Statement:
           - Effect: Allow
             Principal:
               Service:
-                - 'sagemaker.amazonaws.com'
-            Action: 'sts:AssumeRole'
+                - "sagemaker.amazonaws.com"
+            Action: "sts:AssumeRole"
       Policies:
-        - PolicyName: !Sub '${ServiceName}-${StageName}-notebook-policy'
+        - PolicyName: !Sub "${ServiceName}-${StageName}-notebook-policy"
           PolicyDocument:
-            Version: '2012-10-17'
+            Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action:
-                  - 'neptune-db:*'
+                  - "neptune-db:*"
                 # https://docs.aws.amazon.com/ja_jp/neptune/latest/userguide/iam-data-resources.html
                 Resource:
                   !Sub
@@ -196,16 +196,16 @@ Resources:
                 Resource: "*"
       Tags:
         - Key: Name
-          Value: !Sub '${ServiceName}-${StageName}-notebook-role'
+          Value: !Sub "${ServiceName}-${StageName}-notebook-role"
         - Key: ServiceName
           Value: !Ref ServiceName
         - Key: StageName
           Value: !Ref StageName
 
   NeptuneSagemakerNotebook:
-    Type: AWS::SageMaker::NotebookInstance
+    Type: "AWS::SageMaker::NotebookInstance"
     Properties:
-      NotebookInstanceName: !Sub '${ServiceName}-${StageName}-neptune-notebook'
+      NotebookInstanceName: !Sub "${ServiceName}-${StageName}-neptune-notebook"
       InstanceType: !Ref NotebookInstanceType
       RoleArn: !GetAtt NotebookRole.Arn
       RootAccess: Enabled
@@ -215,7 +215,7 @@ Resources:
         Fn::Sub: "${ServiceName}-${StageName}-subnet-private-1"
       Tags: 
         - Key: Name
-          Value: !Sub '${ServiceName}-${StageName}-neptune-notebook'
+          Value: !Sub "${ServiceName}-${StageName}-neptune-notebook"
         - Key: ServiceName
           Value: !Ref ServiceName
         - Key: StageName
