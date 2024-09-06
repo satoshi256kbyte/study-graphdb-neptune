@@ -11,6 +11,22 @@ Metadata:
         Parameters: 
           - "ServiceName"
           - "StageName"
+      - 
+        Label: 
+          default: "Bastion parameters"
+        Parameters: 
+          - "EC2CidrIp"
+          - "Ec2InstanceType"
+          - "KeyPairName"
+          - "VolumeSize"
+          - "Ec2ImageId"
+      - 
+        Label: 
+          default: "Neptune parameters"
+        Parameters: 
+          - "DbInstanceType"
+          - "DBClusterPort"
+          - "NotebookInstanceType"
         
 Parameters: 
   #----------------------------------------
@@ -28,10 +44,46 @@ Parameters:
       - "develop"
       - "stg"
       - "prod"
+
+  #----------------------------------------
+  # Bastion parameters
+  #---------------------------------------- 
+  EC2CidrIp:
+    Description: "IP address range that can access the bastion host"
+    Type: "String"
+    Default: "0.0.0.0/0"
+  Ec2InstanceType:
+    Description: WebServer EC2 instance type
+    Type: String
+    Default: t4g.micro
+    AllowedValues:
+      - t4g.micro
+      - t4g.small
+      - t4g.medium
+    ConstraintDescription: must be a valid EC2 instance type.
+    AllowedPattern: ".+"
+  KeyPairName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
+    AllowedPattern: ".+"
+  VolumeSize:
+    Type: Number
+    Description: Root volume size in GB
+    Default: "50"
+    MinValue: "1"
+    MaxValue: "1000"
+    ConstraintDescription: must be between 1 and 1000 GB.
+  Ec2ImageId:
+      Description: AMI ID of the EC2 instance
+      Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+      Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-arm64-gp2
+      AllowedPattern: ".+"
+
   #----------------------------------------
   # Neptune parameters
   # 参考：https://docs.aws.amazon.com/ja_jp/neptune/latest/userguide/get-started-cfn-create.html
-  #---------------------------------------- 
+  #----------------------------------------
   DbInstanceType:
     Description: Neptune DB instance type
     Type: String
@@ -63,6 +115,29 @@ Parameters:
     ConstraintDescription: Must be a valid SageMaker instance type.
 
 Resources:
+  # ------------------------------------------------------------#
+  #  Security Group
+  # ------------------------------------------------------------#
+  BastionSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupName: !Sub "${ServiceName}-${StageName}-neptune-bastion-sg"
+      GroupDescription: "Enable access to Notebook"
+      VpcId: !ImportValue 
+        Fn::Sub: "${ServiceName}-${StageName}-vpc"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8183
+          ToPort: 8183
+          CidrIp: !Ref EC2CidrIp
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${ServiceName}-${StageName}-neptune-bastion-sg"
+        - Key: "ServiceName"
+          Value: !Ref ServiceName
+        - Key: "StageName"
+          Value: !Ref StageName
+          
   NotebookSecurityGroup:
     Type: "AWS::EC2::SecurityGroup"
     Properties:
@@ -90,6 +165,10 @@ Resources:
           FromPort: 8182
           ToPort: 8182
           SourceSecurityGroupId: !Ref NotebookSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 8182
+          ToPort: 8182
+          SourceSecurityGroupId: !Ref BastionSecurityGroup
       Tags:
         - Key: "Name"
           Value: !Sub "${ServiceName}-${StageName}-neptune-cluster-sg"
@@ -98,25 +177,90 @@ Resources:
         - Key: "StageName"
           Value: !Ref StageName
 
-  NeptuneDBSubnetGroup:
-    Type: "AWS::Neptune::DBSubnetGroup"
+  # ------------------------------------------------------------#
+  #  踏み台サーバー
+  # ------------------------------------------------------------#
+  BastionInstance:
+    Type: AWS::EC2::Instance
     Properties:
-      DBSubnetGroupDescription: !Sub "${ServiceName}-${StageName}-neptune-cluster-subnet-group"
-      SubnetIds: 
-        - !ImportValue 
-          Fn::Sub: "${ServiceName}-${StageName}-subnet-private-1"
-        - !ImportValue 
-          Fn::Sub: "${ServiceName}-${StageName}-subnet-private-2"
-      Tags: 
-        - Key: Name
-          Value: !Sub "${ServiceName}-${StageName}-neptune-cluster-subnet-group"
+      InstanceType: !Ref Ec2InstanceType
+      SubnetId: !ImportValue
+        Fn::Sub: "${ServiceName}-${StageName}-subnet-public-1"
+      ImageId: !Ref Ec2ImageId
+      SecurityGroupIds:
+        - !Ref BastionSecurityGroup
+      IamInstanceProfile: !Ref BastionInstanceProfile
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: !Ref VolumeSize
+            VolumeType: gp3
+      EbsOptimized: false
+      SourceDestCheck: false
+      KeyName: !Ref KeyPairName
+      Tags:
         - Key: ServiceName
           Value: !Ref ServiceName
         - Key: StageName
           Value: !Ref StageName
-    DeletionPolicy: Delete
-    UpdateReplacePolicy: Delete
+        - Key: Name
+          Value: !Sub ${ServiceName}-${StageName}-bastion-instance
 
+  BastionServerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ServiceName}-${StageName}-bastion-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: SSMGetParametersPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "ssm:GetParameters"
+                Resource: "*"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+
+  BastionInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref BastionServerRole
+      InstanceProfileName: !Sub ${ServiceName}-${StageName}-bastion-instance-profile
+
+  BastionElasticIP:
+    Type: "AWS::EC2::EIP"
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: ServiceName
+          Value: !Ref ServiceName
+        - Key: StageName
+          Value: !Ref StageName
+        - Key: Name
+          Value: !Sub ${ServiceName}-${StageName}-bastion-eip
+
+  BastionElasticIPAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      EIP: !Ref BastionElasticIP
+      InstanceId: !Ref BastionInstance
+
+  # ------------------------------------------------------------#
+  #  Neptune
+  # ------------------------------------------------------------#
   NeptuneDBCluster:
     Type: "AWS::Neptune::DBCluster"
     Properties:
@@ -155,6 +299,28 @@ Resources:
     DeletionPolicy: Delete
     UpdateReplacePolicy: Retain
 
+  NeptuneDBSubnetGroup:
+    Type: "AWS::Neptune::DBSubnetGroup"
+    Properties:
+      DBSubnetGroupDescription: !Sub "${ServiceName}-${StageName}-neptune-cluster-subnet-group"
+      SubnetIds: 
+        - !ImportValue 
+          Fn::Sub: "${ServiceName}-${StageName}-subnet-public-1"
+        - !ImportValue 
+          Fn::Sub: "${ServiceName}-${StageName}-subnet-public-2"
+      Tags: 
+        - Key: Name
+          Value: !Sub "${ServiceName}-${StageName}-neptune-cluster-subnet-group"
+        - Key: ServiceName
+          Value: !Ref ServiceName
+        - Key: StageName
+          Value: !Ref StageName
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+
+  # ------------------------------------------------------------#
+  #  Notebook
+  # ------------------------------------------------------------#
   NotebookRole:
     Type: "AWS::IAM::Role"
     Properties:
