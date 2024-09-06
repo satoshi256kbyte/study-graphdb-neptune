@@ -15,11 +15,11 @@ Metadata:
         Label: 
           default: "Bastion parameters"
         Parameters: 
-          - "EC2CidrIp"
-          - "Ec2InstanceType"
-          - "KeyPairName"
+          - "BastionCidrIp"
+          - "BastionInstanceType"
+          - "BastionKeyPairName"
           - "VolumeSize"
-          - "Ec2ImageId"
+          - "BastionKeyEc2ImageId"
       - 
         Label: 
           default: "Neptune parameters"
@@ -27,6 +27,11 @@ Metadata:
           - "DbInstanceType"
           - "DBClusterPort"
           - "NotebookInstanceType"
+      -
+        Label: 
+          default: "Tom Sawyer parameters"
+        Parameters: 
+          - "TomSawyerCidrIp"
         
 Parameters: 
   #----------------------------------------
@@ -48,11 +53,11 @@ Parameters:
   #----------------------------------------
   # Bastion parameters
   #---------------------------------------- 
-  EC2CidrIp:
+  BastionCidrIp:
     Description: "IP address range that can access the bastion host"
     Type: "String"
     Default: "0.0.0.0/0"
-  Ec2InstanceType:
+  BastionInstanceType:
     Description: WebServer EC2 instance type
     Type: String
     Default: t4g.micro
@@ -62,7 +67,7 @@ Parameters:
       - t4g.medium
     ConstraintDescription: must be a valid EC2 instance type.
     AllowedPattern: ".+"
-  KeyPairName:
+  BastionKeyPairName:
     Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
     Type: AWS::EC2::KeyPair::KeyName
     ConstraintDescription: must be the name of an existing EC2 KeyPair.
@@ -74,7 +79,7 @@ Parameters:
     MinValue: "1"
     MaxValue: "1000"
     ConstraintDescription: must be between 1 and 1000 GB.
-  Ec2ImageId:
+  BastionKeyEc2ImageId:
       Description: AMI ID of the EC2 instance
       Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
       Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-arm64-gp2
@@ -114,6 +119,14 @@ Parameters:
       - ml.t3.2xlarge
     ConstraintDescription: Must be a valid SageMaker instance type.
 
+  #----------------------------------------
+  # Tom Sawyer parameters
+  #--------------------------------------
+  TomSawyerCidrIp:
+    Description: "IP address range that can access the Tom Sawyer host"
+    Type: "String"
+    Default: "0.0.0.0/0"
+
 Resources:
   # ------------------------------------------------------------#
   #  Security Group
@@ -127,9 +140,9 @@ Resources:
         Fn::Sub: "${ServiceName}-${StageName}-vpc"
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: 8183
-          ToPort: 8183
-          CidrIp: !Ref EC2CidrIp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref BastionCidrIp
       Tags:
         - Key: "Name"
           Value: !Sub "${ServiceName}-${StageName}-neptune-bastion-sg"
@@ -164,7 +177,7 @@ Resources:
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
-          CidrIp: "0.0.0.0/0"
+          CidrIp: !Ref TomSawyerCidrIp
       Tags:
         - Key: "Name"
           Value: !Sub "${ServiceName}-${StageName}-neptune-tomsawyer-sg"
@@ -207,10 +220,10 @@ Resources:
   BastionInstance:
     Type: AWS::EC2::Instance
     Properties:
-      InstanceType: !Ref Ec2InstanceType
+      InstanceType: !Ref BastionInstanceType
       SubnetId: !ImportValue
         Fn::Sub: "${ServiceName}-${StageName}-subnet-public-1"
-      ImageId: !Ref Ec2ImageId
+      ImageId: !Ref BastionKeyEc2ImageId
       SecurityGroupIds:
         - !Ref BastionSecurityGroup
       IamInstanceProfile: !Ref BastionInstanceProfile
@@ -221,7 +234,7 @@ Resources:
             VolumeType: gp3
       EbsOptimized: false
       SourceDestCheck: false
-      KeyName: !Ref KeyPairName
+      KeyName: !Ref BastionKeyPairName
       Tags:
         - Key: ServiceName
           Value: !Ref ServiceName
