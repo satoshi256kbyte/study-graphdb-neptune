@@ -153,6 +153,21 @@ Resources:
         - Key: "StageName"
           Value: !Ref StageName
 
+  TomSawyerSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupName: !Sub "${ServiceName}-${StageName}-neptune-tomsawyer-sg"
+      GroupDescription: "Enable access to Notebook"
+      VpcId: !ImportValue 
+        Fn::Sub: "${ServiceName}-${StageName}-vpc"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${ServiceName}-${StageName}-neptune-tomsawyer-sg"
+        - Key: "ServiceName"
+          Value: !Ref ServiceName
+        - Key: "StageName"
+          Value: !Ref StageName
+
   NeptuneSecurityGroup:
     Type: "AWS::EC2::SecurityGroup"
     Properties:
@@ -169,6 +184,10 @@ Resources:
           FromPort: 8182
           ToPort: 8182
           SourceSecurityGroupId: !Ref BastionSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 8182
+          ToPort: 8182
+          SourceSecurityGroupId: !Ref TomSawyerSecurityGroup
       Tags:
         - Key: "Name"
           Value: !Sub "${ServiceName}-${StageName}-neptune-cluster-sg"
