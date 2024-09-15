@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: 
-  "VPC"
+  "Getting started with Amazon Neptune - your first graph DB"
 
 Metadata: 
   AWS::CloudFormation::Interface: 
