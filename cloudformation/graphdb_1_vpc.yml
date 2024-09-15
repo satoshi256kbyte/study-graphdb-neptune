@@ -260,8 +260,7 @@ Resources:
     Properties:
       GroupName: !Sub "${ServiceName}-${StageName}-neptune-bastion-sg"
       GroupDescription: "Enable access to Notebook"
-      VpcId: !ImportValue 
-        Fn::Sub: "${ServiceName}-${StageName}-vpc"
+      VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 22
@@ -280,8 +279,7 @@ Resources:
     Properties:
       GroupName: !Sub "${ServiceName}-${StageName}-neptune-notebook-sg"
       GroupDescription: "Enable access to Notebook"
-      VpcId: !ImportValue 
-        Fn::Sub: "${ServiceName}-${StageName}-vpc"
+      VpcId: !Ref VPC
       Tags:
         - Key: "Name"
           Value: !Sub "${ServiceName}-${StageName}-neptune-notebook-sg"
@@ -295,8 +293,7 @@ Resources:
     Properties:
       GroupName: !Sub "${ServiceName}-${StageName}-neptune-tom-sawyer-sg"
       GroupDescription: "Enable access to Notebook"
-      VpcId: !ImportValue 
-        Fn::Sub: "${ServiceName}-${StageName}-vpc"
+      VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 80
@@ -315,8 +312,7 @@ Resources:
     Properties:
       GroupName: !Sub "${ServiceName}-${StageName}-neptune-cluster-sg"
       GroupDescription: "Enable access to Neptune"
-      VpcId: !ImportValue 
-        Fn::Sub: "${ServiceName}-${StageName}-vpc"
+      VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 8182
