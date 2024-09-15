@@ -1,0 +1,153 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: 
+  "Neptune"
+
+Metadata: 
+  AWS::CloudFormation::Interface: 
+    ParameterGroups: 
+      - 
+        Label: 
+          default: "Common parameters"
+        Parameters: 
+          - "ServiceName"
+          - "StageName"
+      - 
+        Label: 
+          default: "Bastion parameters"
+        Parameters: 
+          - "BastionInstanceType"
+          - "BastionKeyPairName"
+          - "VolumeSize"
+          - "BastionKeyEc2ImageId"
+        
+Parameters: 
+  #----------------------------------------
+  # Common parameters
+  #---------------------------------------- 
+  ServiceName: 
+    Description: "Service name"
+    Type: "String"
+    Default: "graphdb"
+  StageName: 
+    Description: "Stage name"
+    Type: "String"
+    Default: "develop"
+    AllowedValues: 
+      - "develop"
+      - "stg"
+      - "prod"
+
+  #----------------------------------------
+  # Bastion parameters
+  #---------------------------------------- 
+  BastionInstanceType:
+    Description: WebServer EC2 instance type
+    Type: String
+    Default: t4g.micro
+    AllowedValues:
+      - t4g.micro
+      - t4g.small
+      - t4g.medium
+    ConstraintDescription: must be a valid EC2 instance type.
+    AllowedPattern: ".+"
+  BastionKeyPairName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
+    AllowedPattern: ".+"
+  VolumeSize:
+    Type: Number
+    Description: Root volume size in GB
+    Default: "50"
+    MinValue: "1"
+    MaxValue: "1000"
+    ConstraintDescription: must be between 1 and 1000 GB.
+  BastionKeyEc2ImageId:
+      Description: AMI ID of the EC2 instance
+      Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+      Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-arm64-gp2
+      AllowedPattern: ".+"
+
+Resources:          
+  # ------------------------------------------------------------#
+  #  踏み台サーバー
+  # ------------------------------------------------------------#
+  BastionInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref BastionInstanceType
+      SubnetId: 
+        Fn::ImportValue:
+          Fn::Sub: "${ServiceName}-${StageName}-subnet-public-1"
+      ImageId: !Ref BastionKeyEc2ImageId
+      SecurityGroupIds:
+        - Fn::ImportValue:
+            Fn::Sub: "${ServiceName}-${StageName}-neptune-bastion-sg"
+      IamInstanceProfile: !Ref BastionInstanceProfile
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: !Ref VolumeSize
+            VolumeType: gp3
+      EbsOptimized: false
+      SourceDestCheck: false
+      KeyName: !Ref BastionKeyPairName
+      Tags:
+        - Key: ServiceName
+          Value: !Ref ServiceName
+        - Key: StageName
+          Value: !Ref StageName
+        - Key: Name
+          Value: !Sub ${ServiceName}-${StageName}-bastion-instance
+
+  BastionServerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ServiceName}-${StageName}-bastion-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: SSMGetParametersPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "ssm:GetParameters"
+                Resource: "*"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+
+  BastionInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref BastionServerRole
+      InstanceProfileName: !Sub ${ServiceName}-${StageName}-bastion-instance-profile
+
+  BastionElasticIP:
+    Type: "AWS::EC2::EIP"
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: ServiceName
+          Value: !Ref ServiceName
+        - Key: StageName
+          Value: !Ref StageName
+        - Key: Name
+          Value: !Sub ${ServiceName}-${StageName}-bastion-eip
+
+  BastionElasticIPAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      EIP: !Ref BastionElasticIP
+      InstanceId: !Ref BastionInstance

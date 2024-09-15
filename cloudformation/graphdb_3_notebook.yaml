@@ -1,0 +1,128 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: 
+  "Neptune"
+
+Metadata: 
+  AWS::CloudFormation::Interface: 
+    ParameterGroups: 
+      - 
+        Label: 
+          default: "Common parameters"
+        Parameters: 
+          - "ServiceName"
+          - "StageName"
+      - 
+        Label: 
+          default: "Notebook parameters"
+        Parameters:
+          - "NotebookInstanceType"
+
+Parameters: 
+  #----------------------------------------
+  # Common parameters
+  #---------------------------------------- 
+  ServiceName: 
+    Description: "Service name"
+    Type: "String"
+    Default: "graphdb"
+  StageName: 
+    Description: "Stage name"
+    Type: "String"
+    Default: "develop"
+    AllowedValues: 
+      - "develop"
+      - "stg"
+      - "prod"
+
+  #----------------------------------------
+  # Notebook parameters
+  #----------------------------------------
+  NotebookInstanceType:
+    Description: >-
+      SageMaker Notebook instance type. Please refer
+      https://aws.amazon.com/sagemaker/pricing/ for uptodate allowed instance
+      type in aws region and https://aws.amazon.com/neptune/pricing/ for
+      pricing.
+    Type: String
+    Default: ml.t3.medium
+    AllowedValues:
+      - none
+      - ml.t3.medium
+      - ml.t3.large
+      - ml.t3.xlarge
+      - ml.t3.2xlarge
+    ConstraintDescription: Must be a valid SageMaker instance type.
+
+Resources:
+  # ------------------------------------------------------------#
+  #  Notebook
+  # ------------------------------------------------------------#
+  NotebookRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: !Sub "${ServiceName}-${StageName}-notebook-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - "sagemaker.amazonaws.com"
+            Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: !Sub "${ServiceName}-${StageName}-notebook-policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "neptune-db:*"
+                # https://docs.aws.amazon.com/ja_jp/neptune/latest/userguide/iam-data-resources.html
+                Resource:
+                  !Sub
+                    - arn:aws:neptune-db:${AWS::Region}:${AWS::AccountId}:${ClusterResourceId}/*
+                    - ClusterResourceId:
+                        Fn::ImportValue: 
+                          Fn::Sub: "${ServiceName}-${StageName}-neptune-cluster-resource-id"
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogDelivery"
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:DeleteLogDelivery"
+                  - "logs:Describe*"
+                  - "logs:GetLogDelivery"
+                  - "logs:GetLogEvents"
+                  - "logs:ListLogDeliveries"
+                  - "logs:PutLogEvents"
+                  - "logs:PutResourcePolicy"
+                  - "logs:UpdateLogDelivery"
+                Resource: "*"
+      Tags:
+        - Key: Name
+          Value: !Sub "${ServiceName}-${StageName}-notebook-role"
+        - Key: ServiceName
+          Value: !Ref ServiceName
+        - Key: StageName
+          Value: !Ref StageName
+
+  NeptuneSagemakerNotebook:
+    Type: "AWS::SageMaker::NotebookInstance"
+    Properties:
+      NotebookInstanceName: !Sub "${ServiceName}-${StageName}-neptune-notebook"
+      InstanceType: !Ref NotebookInstanceType
+      RoleArn: !GetAtt NotebookRole.Arn
+      RootAccess: Enabled
+      SecurityGroupIds: 
+        - Fn::ImportValue: 
+            Fn::Sub: "${ServiceName}-${StageName}-neptune-notebook-sg"
+      SubnetId:
+        Fn::ImportValue:
+          Fn::Sub: "${ServiceName}-${StageName}-subnet-private-1"
+      Tags: 
+        - Key: Name
+          Value: !Sub "${ServiceName}-${StageName}-neptune-notebook"
+        - Key: ServiceName
+          Value: !Ref ServiceName
+        - Key: StageName
+          Value: !Ref StageName

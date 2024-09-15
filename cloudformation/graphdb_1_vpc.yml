@@ -20,6 +20,8 @@ Metadata:
           - "PublicSubnet2CIDR"
           - "PrivateSubnet1CIDR"
           - "PrivateSubnet2CIDR"
+          - "TomSawyerCidrIp"
+          - "BastionCidrIp"
         
 Parameters: 
   #----------------------------------------
@@ -65,6 +67,16 @@ Parameters:
     Description: "Please enter the IP range (CIDR notation) for the private subnet in the second Availability Zone"
     Type: "String"
     Default: "10.192.21.0/24"
+
+  TomSawyerCidrIp:
+    Description: "IP address range that can access the Tom Sawyer host"
+    Type: "String"
+    Default: "0.0.0.0/0"
+
+  BastionCidrIp:
+    Description: "IP address range that can access the bastion host"
+    Type: "String"
+    Default: "0.0.0.0/0"
 
 Resources:
   #----------------------------------------
@@ -240,6 +252,92 @@ Resources:
       RouteTableId: !Ref PrivateRouteTable2
       SubnetId: !Ref PrivateSubnet2
 
+  # ------------------------------------------------------------#
+  #  Security Group
+  # ------------------------------------------------------------#
+  BastionSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupName: !Sub "${ServiceName}-${StageName}-neptune-bastion-sg"
+      GroupDescription: "Enable access to Notebook"
+      VpcId: !ImportValue 
+        Fn::Sub: "${ServiceName}-${StageName}-vpc"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref BastionCidrIp
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${ServiceName}-${StageName}-neptune-bastion-sg"
+        - Key: "ServiceName"
+          Value: !Ref ServiceName
+        - Key: "StageName"
+          Value: !Ref StageName
+          
+  NotebookSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupName: !Sub "${ServiceName}-${StageName}-neptune-notebook-sg"
+      GroupDescription: "Enable access to Notebook"
+      VpcId: !ImportValue 
+        Fn::Sub: "${ServiceName}-${StageName}-vpc"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${ServiceName}-${StageName}-neptune-notebook-sg"
+        - Key: "ServiceName"
+          Value: !Ref ServiceName
+        - Key: "StageName"
+          Value: !Ref StageName
+
+  TomSawyerSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupName: !Sub "${ServiceName}-${StageName}-neptune-tom-sawyer-sg"
+      GroupDescription: "Enable access to Notebook"
+      VpcId: !ImportValue 
+        Fn::Sub: "${ServiceName}-${StageName}-vpc"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref TomSawyerCidrIp
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${ServiceName}-${StageName}-neptune-tom-sawyer-sg"
+        - Key: "ServiceName"
+          Value: !Ref ServiceName
+        - Key: "StageName"
+          Value: !Ref StageName
+
+  NeptuneSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupName: !Sub "${ServiceName}-${StageName}-neptune-cluster-sg"
+      GroupDescription: "Enable access to Neptune"
+      VpcId: !ImportValue 
+        Fn::Sub: "${ServiceName}-${StageName}-vpc"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8182
+          ToPort: 8182
+          SourceSecurityGroupId: !Ref NotebookSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 8182
+          ToPort: 8182
+          SourceSecurityGroupId: !Ref BastionSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 8182
+          ToPort: 8182
+          SourceSecurityGroupId: !Ref TomSawyerSecurityGroup
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${ServiceName}-${StageName}-neptune-cluster-sg"
+        - Key: "ServiceName"
+          Value: !Ref ServiceName
+        - Key: "StageName"
+          Value: !Ref StageName
+
 Outputs:
   VPCId:
     Description: "VPC ID"
@@ -266,3 +364,23 @@ Outputs:
     Value: !Ref PrivateSubnet2
     Export:
       Name: !Sub "${ServiceName}-${StageName}-subnet-private-2"
+  BastionSecurityGroupId:
+    Description: "Bastion Security Group ID"
+    Value: !Ref BastionSecurityGroup
+    Export:
+      Name: !Sub "${ServiceName}-${StageName}-neptune-bastion-sg"
+  NotebookSecurityGroupId:
+    Description: "Notebook Security Group ID"
+    Value: !Ref NotebookSecurityGroup
+    Export:
+      Name: !Sub "${ServiceName}-${StageName}-neptune-notebook-sg"
+  TomSawyerSecurityGroupId:
+    Description: "Tom Sawyer Security Group ID"
+    Value: !Ref TomSawyerSecurityGroup
+    Export:
+      Name: !Sub "${ServiceName}-${StageName}-neptune-tom-sawyer-sg"
+  NeptuneSecurityGroupId:
+    Description: "Neptune Security Group ID"
+    Value: !Ref NeptuneSecurityGroup
+    Export:
+      Name: !Sub "${ServiceName}-${StageName}-neptune-cluster-sg"
