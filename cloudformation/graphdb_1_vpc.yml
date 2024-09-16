@@ -171,7 +171,11 @@ Resources:
       Tags:
         - Key: "Name"
           Value: !Sub "${ServiceName}-${StageName}-subnet-private-1"
-
+        - Key: "ServiceName"
+          Value: !Ref ServiceName
+        - Key: "StageName"
+          Value: !Ref StageName
+          
   PrivateSubnet2:
     Type: "AWS::EC2::Subnet"
     Properties:
@@ -186,71 +190,6 @@ Resources:
           Value: !Ref ServiceName
         - Key: "StageName"
           Value: !Ref StageName
-
-  PrivateRouteTable1:
-    Type: "AWS::EC2::RouteTable"
-    Properties:
-      VpcId: !Ref VPC
-      Tags:
-        - Key: "Name"
-          Value: !Sub "${ServiceName}-${StageName}-private-routetable-1"
-        - Key: "ServiceName"
-          Value: !Ref ServiceName
-        - Key: "StageName"
-          Value: !Ref StageName
-
-  NatGatewayEIP:
-    Type: "AWS::EC2::EIP"
-    DependsOn: "InternetGatewayAttachment"
-    Properties:
-      Domain: "vpc"
-
-  NatGateway:
-    Type: "AWS::EC2::NatGateway"
-    Properties:
-      AllocationId: !GetAtt NatGatewayEIP.AllocationId
-      SubnetId: !Ref PublicSubnet1
-      Tags:
-        - Key: Name
-          Value: !Sub ${ServiceName}-${StageName}-ngw
-        - Key: "ServiceName"
-          Value: !Ref ServiceName
-        - Key: "StageName"
-          Value: !Ref StageName
-
-  DefaultPrivateRoute1:
-    Type: "AWS::EC2::Route"
-    Properties:
-      RouteTableId: !Ref PrivateRouteTable1
-      DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref NatGateway
-
-  PrivateSubnet1RouteTableAssociation:
-    Type: "AWS::EC2::SubnetRouteTableAssociation"
-    Properties:
-      RouteTableId: !Ref PrivateRouteTable1
-      SubnetId: !Ref PrivateSubnet1
-
-  PrivateRouteTable2:
-    Type: "AWS::EC2::RouteTable"
-    Properties:
-      VpcId: !Ref VPC
-      Tags:
-        - Key: "Name"
-          Value: !Sub "${ServiceName}-${StageName}-private-routetable-2"
-
-  DefaultPrivateRoute2:
-    Type: "AWS::EC2::Route"
-    Properties:
-      RouteTableId: !Ref PrivateRouteTable2
-      DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref NatGateway
-
-  PrivateSubnet2RouteTableAssociation:
-    Type: "AWS::EC2::SubnetRouteTableAssociation"
-    Properties:
-      RouteTableId: !Ref PrivateRouteTable2
-      SubnetId: !Ref PrivateSubnet2
 
   # ------------------------------------------------------------#
   #  Security Group
